@@ -16,6 +16,7 @@ vim.opt.rtp:prepend(lazypath)
 vim.g.mapleader = " "
 vim.opt.number = true
 vim.opt.relativenumber = true
+vim.opt.clipboard = "unnamedplus"
 
 vim.api.nvim_create_autocmd("FileType", {
   callback = function(args)
@@ -26,12 +27,49 @@ vim.api.nvim_create_autocmd("FileType", {
 require("lazy").setup({
   {
     "nvim-treesitter/nvim-treesitter",
-    branch = "main",
+    branch = "master",
     lazy = false,
     build = ":TSUpdate",
+    config = function()
+      require("nvim-treesitter.configs").setup({
+        ensure_installed = { "lua", "python", "bash", "markdown", "cpp", "rust" },
+        highlight = { enable = true },
+        textobjects = {
+          select = {
+            enable = true,
+            lookahead = true,
+            include_surrounding_whitespace = true,
+            keymaps = {
+              ["af"] = "@function.outer",
+              ["if"] = "@function.inner",
+              ["ac"] = "@class.outer",
+              ["ic"] = "@class.inner",
+            },
+          },
+          move = {
+            enable = true,
+            set_jumps = true,
+            goto_next_start = {
+              ["]f"] = "@function.outer",
+              ["]c"] = "@class.outer",
+            },
+            goto_previous_start = {
+              ["[f"] = "@function.outer",
+              ["[c"] = "@class.outer",
+            },
+          },
+        },
+      })
+    end,
+  },
+  {
+    "nvim-treesitter/nvim-treesitter-textobjects",
+    branch = "master",
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
   },
   {
     "nvim-telescope/telescope.nvim",
+    branch = "0.1.x",
     dependencies = { "nvim-lua/plenary.nvim" },
     config = function()
       local builtin = require("telescope.builtin")
@@ -42,50 +80,4 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>sh", builtin.help_tags, { desc = "Find help" })
     end,
   },
-  {
-    "nvim-treesitter/nvim-treesitter-textobjects",
-    dependencies = { "nvim-treesitter/nvim-treesitter" },
-    config = function()
-      require("nvim-treesitter-textobjects").setup({
-        select = {
-          include_surrounding_whitespace = true,
-        },
-      })
-
-      local move = require("nvim-treesitter-textobjects.move")
-      local select = require("nvim-treesitter-textobjects.select")
-
-      vim.keymap.set({ "x", "o" }, "af", function()
-        select.select_textobject("@function.outer", "textobjects")
-      end, { desc = "Around function" })
-
-      vim.keymap.set({ "x", "o" }, "if", function()
-        select.select_textobject("@function.inner", "textobjects")
-      end, { desc = "Inside function" })
-
-      vim.keymap.set({ "x", "o" }, "ac", function()
-        select.select_textobject("@class.outer", "textobjects")
-      end, { desc = "Around class" })
-
-      vim.keymap.set({ "x", "o" }, "ic", function()
-        select.select_textobject("@class.inner", "textobjects")
-      end, { desc = "Inside class" })
-
-      vim.keymap.set({ "n", "x", "o" }, "]f", function()
-        move.goto_next_start("@function.outer", "textobjects")
-      end, { desc = "Next function start" })
-
-      vim.keymap.set({ "n", "x", "o" }, "[f", function()
-        move.goto_previous_start("@function.outer", "textobjects")
-      end, { desc = "Previous function start" })
-
-      vim.keymap.set({ "n", "x", "o" }, "]c", function()
-        move.goto_next_start("@class.outer", "textobjects")
-      end, { desc = "Next class start" })
-
-      vim.keymap.set({ "n", "x", "o" }, "[c", function()
-        move.goto_previous_start("@class.outer", "textobjects")
-      end, { desc = "Previous class start" })
-    end,
-  },
-})
+}) 
