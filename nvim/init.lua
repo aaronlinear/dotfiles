@@ -16,13 +16,23 @@ vim.opt.rtp:prepend(lazypath)
 vim.g.mapleader = " "
 -- Stop <Space> from moving the cursor; only act as the leader key
 vim.keymap.set({ "n", "v" }, "<Space>", "<Nop>", { silent = true })
--- Clear search highlight on <Esc>
-vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>", { silent = true })
+-- Clear search highlight and close floating windows (e.g. the <leader>e diagnostic float) on <Esc>
+vim.keymap.set("n", "<Esc>", function()
+  vim.cmd("nohlsearch")
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_config(win).relative ~= "" then
+      pcall(vim.api.nvim_win_close, win, false)
+    end
+  end
+end, { silent = true, desc = "Clear highlight & close floating windows" })
 -- Move between windows with Ctrl-h/j/k/l
 vim.keymap.set("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
 vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Go to lower window" })
 vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Go to upper window" })
 vim.keymap.set("n", "<C-l>", "<C-w>l", { desc = "Go to right window" })
+-- Jump to start/end of line with H/L
+vim.keymap.set({ "n", "v" }, "H", "^", { desc = "Start of line (first non-blank)" })
+vim.keymap.set({ "n", "v" }, "L", "$", { desc = "End of line" })
 vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.clipboard = "unnamedplus"
@@ -134,6 +144,7 @@ require("lazy").setup({
           vim.keymap.set("n", "<leader>d", tb.lsp_definitions, vim.tbl_extend("force", opts, { desc = "Go to definition" }))
           vim.keymap.set("n", "<leader>r", tb.lsp_references, vim.tbl_extend("force", opts, { desc = "Go to references" }))
           vim.keymap.set("n", "<leader>i", tb.lsp_implementations, vim.tbl_extend("force", opts, { desc = "Go to implementations" }))
+          vim.keymap.set("n", "<leader>t", tb.lsp_type_definitions, vim.tbl_extend("force", opts, { desc = "Go to type definition" }))
           vim.keymap.set("n", "<leader>gn", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "Rename symbol" }))
           vim.keymap.set("n", "<leader>gc", vim.lsp.buf.code_action, vim.tbl_extend("force", opts, { desc = "Code action" }))
           vim.keymap.set("n", "<leader>h", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "Hover docs" }))
