@@ -36,6 +36,37 @@ vim.keymap.set({ "n", "v" }, "L", "$", { desc = "End of line" })
 vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.clipboard = "unnamedplus"
+-- Keep 10 lines of context above/below the cursor so the view scrolls before
+-- the cursor reaches the very edge of the window
+vim.opt.scrolloff = 10
+
+-- Auto-reload files changed outside of nvim; :checktime re-reads on focus/enter
+-- if the buffer is unmodified. <leader>l force-reloads (discards local edits),
+-- since plain :e refuses when there are unsaved changes.
+vim.opt.autoread = true
+vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
+  callback = function()
+    if vim.fn.mode() == "n" then
+      vim.cmd("checktime")
+    end
+  end,
+})
+vim.keymap.set("n", "<leader>l", "<cmd>edit!<CR>", { desc = "Reload buffer from disk" })
+
+-- Copy the current buffer's path to the system clipboard. `modifier` is a
+-- filename-modifier passed to expand() (":p" absolute, ":." relative, ":t" name)
+local function copy_path(modifier)
+  local path = vim.fn.expand("%" .. modifier)
+  if path == "" then
+    vim.notify("No file in current buffer", vim.log.levels.WARN)
+    return
+  end
+  vim.fn.setreg("+", path)
+  vim.notify("Copied: " .. path)
+end
+vim.keymap.set("n", "<leader>ya", function() copy_path(":p") end, { desc = "Copy absolute file path" })
+vim.keymap.set("n", "<leader>yr", function() copy_path(":.") end, { desc = "Copy relative file path" })
+vim.keymap.set("n", "<leader>yn", function() copy_path(":t") end, { desc = "Copy file name" })
 
 vim.api.nvim_create_autocmd("FileType", {
   callback = function(args)
@@ -87,6 +118,51 @@ require("lazy").setup({
     dependencies = { "nvim-treesitter/nvim-treesitter" },
   },
   {
+    "lewis6991/gitsigns.nvim",
+    config = function()
+      require("gitsigns").setup({
+        on_attach = function(bufnr)
+          local gs = require("gitsigns")
+          local function map(mode, lhs, rhs, desc)
+            vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
+          end
+
+          -- Navigate hunks (respects diff mode)
+          map("n", "]c", function()
+            if vim.wo.diff then
+              vim.cmd.normal({ "]c", bang = true })
+            else
+              gs.nav_hunk("next")
+            end
+          end, "Next git hunk")
+          map("n", "[c", function()
+            if vim.wo.diff then
+              vim.cmd.normal({ "[c", bang = true })
+            else
+              gs.nav_hunk("prev")
+            end
+          end, "Previous git hunk")
+
+          -- Hunk actions
+          map("n", "<leader>gs", gs.stage_hunk, "Stage hunk")
+          map("v", "<leader>gs", function()
+            gs.stage_hunk({ vim.fn.line("."), vim.fn.line("v") })
+          end, "Stage hunk")
+          map("n", "<leader>gr", gs.reset_hunk, "Reset hunk")
+          map("v", "<leader>gr", function()
+            gs.reset_hunk({ vim.fn.line("."), vim.fn.line("v") })
+          end, "Reset hunk")
+          map("n", "<leader>gu", gs.undo_stage_hunk, "Undo stage hunk")
+          map("n", "<leader>gp", gs.preview_hunk, "Preview hunk")
+          map("n", "<leader>gb", function()
+            gs.blame_line({ full = true })
+          end, "Blame line")
+          map("n", "<leader>gB", gs.toggle_current_line_blame, "Toggle inline blame")
+        end,
+      })
+    end,
+  },
+  {
     "nvim-telescope/telescope.nvim",
     branch = "0.1.x",
     dependencies = { "nvim-lua/plenary.nvim" },
@@ -103,6 +179,7 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>sg", builtin.live_grep, { desc = "Live grep" })
       vim.keymap.set("n", "<leader>sb", builtin.buffers, { desc = "Find buffers" })
       vim.keymap.set("n", "<leader>sh", builtin.help_tags, { desc = "Find help" })
+      vim.keymap.set("n", "<leader>sk", builtin.keymaps, { desc = "Find keymaps" })
       vim.keymap.set("n", "<leader>w", builtin.grep_string, { desc = "Search word under cursor" })
     end,
   },
