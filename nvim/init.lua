@@ -127,15 +127,16 @@ require("lazy").setup({
             vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
           end
 
-          -- Navigate hunks (respects diff mode)
-          map("n", "]c", function()
+          -- Navigate hunks (respects diff mode). Uses ]h/[h to avoid clashing
+          -- with treesitter's ]c/[c class-motion mappings.
+          map("n", "]h", function()
             if vim.wo.diff then
               vim.cmd.normal({ "]c", bang = true })
             else
               gs.nav_hunk("next")
             end
           end, "Next git hunk")
-          map("n", "[c", function()
+          map("n", "[h", function()
             if vim.wo.diff then
               vim.cmd.normal({ "[c", bang = true })
             else
@@ -170,6 +171,19 @@ require("lazy").setup({
       require("telescope").setup({
         defaults = {
           dynamic_preview_title = true,
+          -- Use ripgrep to enumerate files (fast on huge monorepos, respects
+          -- .gitignore). rg is already required for live_grep, so no extra
+          -- system dependency — keeps this config portable across machines.
+          find_command = { "rg", "--files", "--hidden", "--glob", "!.git/" },
+          -- Prune generated/vendored dirs that otherwise flood results in
+          -- large repos (e.g. universe's Bazel output).
+          file_ignore_patterns = {
+            "^bazel%-",
+            "/bazel%-",
+            "node_modules/",
+            "/target/",
+            "%.git/",
+          },
         },
       })
 
@@ -203,8 +217,27 @@ require("lazy").setup({
       local lspconfig = require("lspconfig")
       lspconfig.basedpyright.setup({})
       lspconfig.lua_ls.setup({})
-      lspconfig.rust_analyzer.setup({})
       lspconfig.clangd.setup({})
+
+      -- rust-analyzer can be launched from two places:
+      --   * Mason's binary   — one generic prebuilt copy Mason downloads.
+      --   * rustup's proxy    — ~/.cargo/bin/rust-analyzer, a forwarder that
+      --     detects the toolchain the current project pins (rust-toolchain.toml)
+      --     and dispatches to THAT toolchain's rust-analyzer.
+      -- Prefer the proxy when rustup is present: matching the project's pinned
+      -- toolchain avoids mismatches that break e.g. proc-macro/build-script
+      -- expansion. Fall back to Mason's binary (kept in ensure_installed above)
+      -- on machines without rustup — hence the executable() guard.
+      -- Caveat: the guard only checks the proxy file exists, not that the
+      -- toolchain has the rust-analyzer component. If rustup is present but the
+      -- component is missing, the proxy is still chosen and errors at launch;
+      -- run `rustup component add rust-analyzer` there if that happens.
+      local rustup_ra = vim.fn.expand("~/.cargo/bin/rust-analyzer")
+      local ra_opts = {}
+      if vim.fn.executable(rustup_ra) == 1 then
+        ra_opts.cmd = { rustup_ra }
+      end
+      lspconfig.rust_analyzer.setup(ra_opts)
 
       -- Inline diagnostics (on by default in 0.10, off by default in 0.11+)
       vim.diagnostic.config({ virtual_text = true })
@@ -222,8 +255,8 @@ require("lazy").setup({
           vim.keymap.set("n", "<leader>r", tb.lsp_references, vim.tbl_extend("force", opts, { desc = "Go to references" }))
           vim.keymap.set("n", "<leader>i", tb.lsp_implementations, vim.tbl_extend("force", opts, { desc = "Go to implementations" }))
           vim.keymap.set("n", "<leader>t", tb.lsp_type_definitions, vim.tbl_extend("force", opts, { desc = "Go to type definition" }))
-          vim.keymap.set("n", "<leader>gn", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "Rename symbol" }))
-          vim.keymap.set("n", "<leader>gc", vim.lsp.buf.code_action, vim.tbl_extend("force", opts, { desc = "Code action" }))
+          vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "Rename symbol" }))
+          vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, vim.tbl_extend("force", opts, { desc = "Code action" }))
           vim.keymap.set("n", "<leader>h", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "Hover docs" }))
           vim.keymap.set("n", "<leader>sd", tb.lsp_document_symbols, vim.tbl_extend("force", opts, { desc = "Document symbols" }))
           vim.keymap.set("n", "<leader>sw", tb.lsp_dynamic_workspace_symbols, vim.tbl_extend("force", opts, { desc = "Workspace symbols" }))
