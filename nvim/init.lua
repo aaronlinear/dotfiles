@@ -166,11 +166,28 @@ require("lazy").setup({
   {
     "nvim-telescope/telescope.nvim",
     branch = "0.1.x",
-    dependencies = { "nvim-lua/plenary.nvim" },
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      -- Compiled C fuzzy sorter. Replaces telescope's in-process Lua matcher,
+      -- which on huge repos (universe) is slow enough that the results list can
+      -- fail to redraw on each keystroke until some event (e.g. arrow press)
+      -- nudges it. `cond` guards machines without a compiler: fzf-native is
+      -- skipped there and telescope falls back to the Lua sorter.
+      {
+        "nvim-telescope/telescope-fzf-native.nvim",
+        build = "make",
+        cond = function()
+          return vim.fn.executable("make") == 1
+        end,
+      },
+    },
     config = function()
       require("telescope").setup({
         defaults = {
           dynamic_preview_title = true,
+          -- Show filename before its (dimmed) directory — far more legible than
+          -- deep leading paths in a large monorepo.
+          path_display = { "filename_first" },
           -- Use ripgrep to enumerate files (fast on huge monorepos, respects
           -- .gitignore). rg is already required for live_grep, so no extra
           -- system dependency — keeps this config portable across machines.
@@ -187,6 +204,10 @@ require("lazy").setup({
         },
       })
 
+      -- Activate fzf-native when it built (see cond guard above). pcall keeps
+      -- startup clean on machines where the extension was skipped.
+      pcall(require("telescope").load_extension, "fzf")
+
       local builtin = require("telescope.builtin")
 
       vim.keymap.set("n", "<leader>sf", builtin.find_files, { desc = "Find files" })
@@ -196,6 +217,13 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>sk", builtin.keymaps, { desc = "Find keymaps" })
       vim.keymap.set("n", "<leader>w", builtin.grep_string, { desc = "Search word under cursor" })
     end,
+  },
+  {
+    -- Surfaces LSP progress ($/progress) as a subtle spinner/toast. Gives
+    -- feedback during slow requests — e.g. lsp_references or rust-analyzer's
+    -- initial indexing in universe — that otherwise look like a hung editor.
+    "j-hui/fidget.nvim",
+    config = true,
   },
   {
     "williamboman/mason.nvim",
