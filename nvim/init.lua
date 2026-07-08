@@ -246,7 +246,15 @@ require("lazy").setup({
       })
 
       local lspconfig = require("lspconfig")
-      lspconfig.basedpyright.setup({})
+      lspconfig.basedpyright.setup({
+        settings = {
+          basedpyright = {
+            analysis = {
+              typeCheckingMode = "standard",
+            },
+          },
+        },
+      })
       lspconfig.lua_ls.setup({})
       lspconfig.clangd.setup({})
 
@@ -271,7 +279,11 @@ require("lazy").setup({
       lspconfig.rust_analyzer.setup(ra_opts)
 
       -- Inline diagnostics (on by default in 0.10, off by default in 0.11+)
-      vim.diagnostic.config({ virtual_text = true })
+      vim.diagnostic.config({
+        virtual_text = {
+          severity = vim.diagnostic.severity.ERROR,
+        },
+      })
 
       vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
       vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
