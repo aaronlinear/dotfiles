@@ -53,6 +53,9 @@ vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
 })
 vim.keymap.set("n", "<leader>l", "<cmd>edit!<CR>", { desc = "Reload buffer from disk" })
 
+-- Open netrw file explorer in the current buffer's directory
+vim.keymap.set("n", "<leader>se", "<cmd>Explore<CR>", { desc = "Open file explorer (netrw)" })
+
 -- Copy the current buffer's path to the system clipboard. `modifier` is a
 -- filename-modifier passed to expand() (":p" absolute, ":." relative, ":t" name)
 local function copy_path(modifier)
