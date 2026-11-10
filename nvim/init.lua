@@ -36,6 +36,8 @@ vim.keymap.set({ "n", "v" }, "L", "$", { desc = "End of line" })
 vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.clipboard = "unnamedplus"
+-- Use the terminal's 16/256-color palette (matches how nvim looks inside tmux)
+vim.opt.termguicolors = false
 -- Keep 10 lines of context above/below the cursor so the view scrolls before
 -- the cursor reaches the very edge of the window
 vim.opt.scrolloff = 10
@@ -80,45 +82,54 @@ vim.api.nvim_create_autocmd("FileType", {
 require("lazy").setup({
   {
     "nvim-treesitter/nvim-treesitter",
-    branch = "master",
+    -- `main` is the rewrite for nvim 0.11+; `master` is frozen and crashes on
+    -- 0.11+ (iter_matches now returns node lists). Parser builds need the
+    -- tree-sitter CLI (`brew install tree-sitter-cli`). Highlighting is started
+    -- by the FileType autocmd above.
+    branch = "main",
     lazy = false,
     build = ":TSUpdate",
     config = function()
-      require("nvim-treesitter.configs").setup({
-        ensure_installed = { "lua", "python", "bash", "markdown", "cpp", "rust" },
-        highlight = { enable = true },
-        textobjects = {
-          select = {
-            enable = true,
-            lookahead = true,
-            include_surrounding_whitespace = true,
-            keymaps = {
-              ["af"] = "@function.outer",
-              ["if"] = "@function.inner",
-              ["ac"] = "@class.outer",
-              ["ic"] = "@class.inner",
-            },
-          },
-          move = {
-            enable = true,
-            set_jumps = true,
-            goto_next_start = {
-              ["]f"] = "@function.outer",
-              ["]c"] = "@class.outer",
-            },
-            goto_previous_start = {
-              ["[f"] = "@function.outer",
-              ["[c"] = "@class.outer",
-            },
-          },
-        },
-      })
+      require("nvim-treesitter").install({ "lua", "python", "bash", "markdown", "cpp", "rust" })
     end,
   },
   {
     "nvim-treesitter/nvim-treesitter-textobjects",
-    branch = "master",
+    branch = "main",
     dependencies = { "nvim-treesitter/nvim-treesitter" },
+    config = function()
+      require("nvim-treesitter-textobjects").setup({
+        select = {
+          lookahead = true,
+          include_surrounding_whitespace = true,
+        },
+        move = {
+          set_jumps = true,
+        },
+      })
+
+      local select = require("nvim-treesitter-textobjects.select")
+      local function sel(lhs, query, desc)
+        vim.keymap.set({ "x", "o" }, lhs, function()
+          select.select_textobject(query, "textobjects")
+        end, { desc = desc })
+      end
+      sel("af", "@function.outer", "Around function")
+      sel("if", "@function.inner", "Inside function")
+      sel("ac", "@class.outer", "Around class")
+      sel("ic", "@class.inner", "Inside class")
+
+      local move = require("nvim-treesitter-textobjects.move")
+      local function mv(lhs, fn, query, desc)
+        vim.keymap.set({ "n", "x", "o" }, lhs, function()
+          move[fn](query, "textobjects")
+        end, { desc = desc })
+      end
+      mv("]f", "goto_next_start", "@function.outer", "Next function start")
+      mv("[f", "goto_previous_start", "@function.outer", "Previous function start")
+      mv("]c", "goto_next_start", "@class.outer", "Next class start")
+      mv("[c", "goto_previous_start", "@class.outer", "Previous class start")
+    end,
   },
   {
     "lewis6991/gitsigns.nvim",
@@ -168,7 +179,6 @@ require("lazy").setup({
   },
   {
     "nvim-telescope/telescope.nvim",
-    branch = "0.1.x",
     dependencies = {
       "nvim-lua/plenary.nvim",
       -- Compiled C fuzzy sorter. Replaces telescope's in-process Lua matcher,
@@ -229,24 +239,20 @@ require("lazy").setup({
     config = true,
   },
   {
-    "williamboman/mason.nvim",
-    version = "^1.0.0", -- 1.x is the last line supporting nvim 0.10
+    "mason-org/mason.nvim",
     config = true,
   },
   {
-    "williamboman/mason-lspconfig.nvim",
-    version = "^1.0.0", -- pair with mason 1.x; 2.x requires nvim 0.11+
+    -- mason-lspconfig 2.x calls vim.lsp.enable() for every installed server;
+    -- nvim-lspconfig only supplies the default lsp/<server>.lua configs, and
+    -- the vim.lsp.config() calls below layer our overrides on top.
+    "mason-org/mason-lspconfig.nvim",
     dependencies = {
-      "williamboman/mason.nvim",
-      { "neovim/nvim-lspconfig", version = "^1.0.0" }, -- 2.x deprecates nvim 0.10
+      "mason-org/mason.nvim",
+      "neovim/nvim-lspconfig",
     },
     config = function()
-      require("mason-lspconfig").setup({
-        ensure_installed = { "basedpyright", "lua_ls", "rust_analyzer", "clangd" },
-      })
-
-      local lspconfig = require("lspconfig")
-      lspconfig.basedpyright.setup({
+      vim.lsp.config("basedpyright", {
         settings = {
           basedpyright = {
             analysis = {
@@ -255,8 +261,6 @@ require("lazy").setup({
           },
         },
       })
-      lspconfig.lua_ls.setup({})
-      lspconfig.clangd.setup({})
 
       -- rust-analyzer can be launched from two places:
       --   * Mason's binary   — one generic prebuilt copy Mason downloads.
@@ -265,28 +269,31 @@ require("lazy").setup({
       --     and dispatches to THAT toolchain's rust-analyzer.
       -- Prefer the proxy when rustup is present: matching the project's pinned
       -- toolchain avoids mismatches that break e.g. proc-macro/build-script
-      -- expansion. Fall back to Mason's binary (kept in ensure_installed above)
+      -- expansion. Fall back to Mason's binary (kept in ensure_installed below)
       -- on machines without rustup — hence the executable() guard.
       -- Caveat: the guard only checks the proxy file exists, not that the
       -- toolchain has the rust-analyzer component. If rustup is present but the
       -- component is missing, the proxy is still chosen and errors at launch;
       -- run `rustup component add rust-analyzer` there if that happens.
       local rustup_ra = vim.fn.expand("~/.cargo/bin/rust-analyzer")
-      local ra_opts = {}
       if vim.fn.executable(rustup_ra) == 1 then
-        ra_opts.cmd = { rustup_ra }
+        vim.lsp.config("rust_analyzer", { cmd = { rustup_ra } })
       end
-      lspconfig.rust_analyzer.setup(ra_opts)
 
-      -- Inline diagnostics (on by default in 0.10, off by default in 0.11+)
+      -- Configs above must be registered before setup(), which enables servers.
+      require("mason-lspconfig").setup({
+        ensure_installed = { "basedpyright", "lua_ls", "rust_analyzer", "clangd" },
+      })
+
+      -- Inline diagnostics (off by default since 0.11)
       vim.diagnostic.config({
         virtual_text = {
           severity = vim.diagnostic.severity.ERROR,
         },
       })
 
-      vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
-      vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
+      vim.keymap.set("n", "[d", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Previous diagnostic" })
+      vim.keymap.set("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = "Next diagnostic" })
       vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic detail" })
       vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
 
