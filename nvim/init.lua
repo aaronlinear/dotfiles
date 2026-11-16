@@ -14,9 +14,9 @@ end
 
 vim.opt.rtp:prepend(lazypath)
 vim.g.mapleader = " "
--- Stop <Space> from moving the cursor; only act as the leader key
+-- <Space> acts only as leader
 vim.keymap.set({ "n", "v" }, "<Space>", "<Nop>", { silent = true })
--- Clear search highlight and close floating windows (e.g. the <leader>e diagnostic float) on <Esc>
+-- <Esc>: clear search highlight and close floating windows
 vim.keymap.set("n", "<Esc>", function()
   vim.cmd("nohlsearch")
   for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -36,15 +36,11 @@ vim.keymap.set({ "n", "v" }, "L", "$", { desc = "End of line" })
 vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.clipboard = "unnamedplus"
--- Use the terminal's 16/256-color palette (matches how nvim looks inside tmux)
+-- Use the terminal's color palette
 vim.opt.termguicolors = false
--- Keep 10 lines of context above/below the cursor so the view scrolls before
--- the cursor reaches the very edge of the window
 vim.opt.scrolloff = 10
 
--- Auto-reload files changed outside of nvim; :checktime re-reads on focus/enter
--- if the buffer is unmodified. <leader>l force-reloads (discards local edits),
--- since plain :e refuses when there are unsaved changes.
+-- Reload unmodified buffers changed outside nvim; <leader>l force-reloads
 vim.opt.autoread = true
 vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
   callback = function()
@@ -58,8 +54,7 @@ vim.keymap.set("n", "<leader>l", "<cmd>edit!<CR>", { desc = "Reload buffer from 
 -- Open netrw file explorer in the current buffer's directory
 vim.keymap.set("n", "<leader>se", "<cmd>Explore<CR>", { desc = "Open file explorer (netrw)" })
 
--- Copy the current buffer's path to the system clipboard. `modifier` is a
--- filename-modifier passed to expand() (":p" absolute, ":." relative, ":t" name)
+-- Copy buffer path to clipboard; `modifier` is an expand() modifier
 local function copy_path(modifier)
   local path = vim.fn.expand("%" .. modifier)
   if path == "" then
@@ -73,6 +68,7 @@ vim.keymap.set("n", "<leader>ya", function() copy_path(":p") end, { desc = "Copy
 vim.keymap.set("n", "<leader>yr", function() copy_path(":.") end, { desc = "Copy relative file path" })
 vim.keymap.set("n", "<leader>yn", function() copy_path(":t") end, { desc = "Copy file name" })
 
+-- Treesitter highlighting wherever a parser exists
 vim.api.nvim_create_autocmd("FileType", {
   callback = function(args)
     pcall(vim.treesitter.start, args.buf)
@@ -82,10 +78,7 @@ vim.api.nvim_create_autocmd("FileType", {
 require("lazy").setup({
   {
     "nvim-treesitter/nvim-treesitter",
-    -- `main` is the rewrite for nvim 0.11+; `master` is frozen and crashes on
-    -- 0.11+ (iter_matches now returns node lists). Parser builds need the
-    -- tree-sitter CLI (`brew install tree-sitter-cli`). Highlighting is started
-    -- by the FileType autocmd above.
+    -- `main` supports nvim 0.11+; parser builds need the tree-sitter CLI
     branch = "main",
     lazy = false,
     build = ":TSUpdate",
@@ -141,8 +134,7 @@ require("lazy").setup({
             vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
           end
 
-          -- Navigate hunks (respects diff mode). Uses ]h/[h to avoid clashing
-          -- with treesitter's ]c/[c class-motion mappings.
+          -- Navigate hunks (]c/[c are taken by class motions)
           map("n", "]h", function()
             if vim.wo.diff then
               vim.cmd.normal({ "]c", bang = true })
@@ -181,11 +173,7 @@ require("lazy").setup({
     "nvim-telescope/telescope.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim",
-      -- Compiled C fuzzy sorter. Replaces telescope's in-process Lua matcher,
-      -- which on huge repos (universe) is slow enough that the results list can
-      -- fail to redraw on each keystroke until some event (e.g. arrow press)
-      -- nudges it. `cond` guards machines without a compiler: fzf-native is
-      -- skipped there and telescope falls back to the Lua sorter.
+      -- Native sorter, faster on large repos; skipped without `make`
       {
         "nvim-telescope/telescope-fzf-native.nvim",
         build = "make",
@@ -198,27 +186,21 @@ require("lazy").setup({
       require("telescope").setup({
         defaults = {
           dynamic_preview_title = true,
-          -- Show filename before its (dimmed) directory — far more legible than
-          -- deep leading paths in a large monorepo.
           path_display = { "filename_first" },
-          -- Use ripgrep to enumerate files (fast on huge monorepos, respects
-          -- .gitignore). rg is already required for live_grep, so no extra
-          -- system dependency — keeps this config portable across machines.
+          -- rg is fast and respects .gitignore
           find_command = { "rg", "--files", "--hidden", "--glob", "!.git/" },
-          -- Prune generated/vendored dirs that otherwise flood results in
-          -- large repos (e.g. universe's Bazel output).
+          -- Skip generated/vendored dirs. No target/: it would also hide
+          -- source dirs named target, and Cargo's is already gitignored.
           file_ignore_patterns = {
             "^bazel%-",
             "/bazel%-",
             "node_modules/",
-            "/target/",
             "%.git/",
           },
         },
       })
 
-      -- Activate fzf-native when it built (see cond guard above). pcall keeps
-      -- startup clean on machines where the extension was skipped.
+      -- No-op if fzf-native was skipped
       pcall(require("telescope").load_extension, "fzf")
 
       local builtin = require("telescope.builtin")
@@ -232,9 +214,7 @@ require("lazy").setup({
     end,
   },
   {
-    -- Surfaces LSP progress ($/progress) as a subtle spinner/toast. Gives
-    -- feedback during slow requests — e.g. lsp_references or rust-analyzer's
-    -- initial indexing in universe — that otherwise look like a hung editor.
+    -- LSP progress indicator
     "j-hui/fidget.nvim",
     config = true,
   },
@@ -243,9 +223,8 @@ require("lazy").setup({
     config = true,
   },
   {
-    -- mason-lspconfig 2.x calls vim.lsp.enable() for every installed server;
-    -- nvim-lspconfig only supplies the default lsp/<server>.lua configs, and
-    -- the vim.lsp.config() calls below layer our overrides on top.
+    -- mason-lspconfig enables installed servers; nvim-lspconfig provides
+    -- defaults, overridden by vim.lsp.config() below
     "mason-org/mason-lspconfig.nvim",
     dependencies = {
       "mason-org/mason.nvim",
@@ -262,30 +241,19 @@ require("lazy").setup({
         },
       })
 
-      -- rust-analyzer can be launched from two places:
-      --   * Mason's binary   — one generic prebuilt copy Mason downloads.
-      --   * rustup's proxy    — ~/.cargo/bin/rust-analyzer, a forwarder that
-      --     detects the toolchain the current project pins (rust-toolchain.toml)
-      --     and dispatches to THAT toolchain's rust-analyzer.
-      -- Prefer the proxy when rustup is present: matching the project's pinned
-      -- toolchain avoids mismatches that break e.g. proc-macro/build-script
-      -- expansion. Fall back to Mason's binary (kept in ensure_installed below)
-      -- on machines without rustup — hence the executable() guard.
-      -- Caveat: the guard only checks the proxy file exists, not that the
-      -- toolchain has the rust-analyzer component. If rustup is present but the
-      -- component is missing, the proxy is still chosen and errors at launch;
-      -- run `rustup component add rust-analyzer` there if that happens.
+      -- Prefer rustup's rust-analyzer proxy (matches the project's toolchain,
+      -- needs `rustup component add rust-analyzer`), else Mason's
       local rustup_ra = vim.fn.expand("~/.cargo/bin/rust-analyzer")
       if vim.fn.executable(rustup_ra) == 1 then
         vim.lsp.config("rust_analyzer", { cmd = { rustup_ra } })
       end
 
-      -- Configs above must be registered before setup(), which enables servers.
+      -- Must follow vim.lsp.config() calls
       require("mason-lspconfig").setup({
         ensure_installed = { "basedpyright", "lua_ls", "rust_analyzer", "clangd" },
       })
 
-      -- Inline diagnostics (off by default since 0.11)
+      -- Inline diagnostics, errors only
       vim.diagnostic.config({
         virtual_text = {
           severity = vim.diagnostic.severity.ERROR,
