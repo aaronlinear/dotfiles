@@ -119,6 +119,12 @@ require("lazy").setup({
             end
           end
 
+          local function set_base(rev)
+            gs.change_base(rev, true, vim.schedule_wrap(function()
+              vim.notify("Diff base: " .. (rev or "index"))
+            end))
+          end
+
           map("n", "]h", nav_hunk("next", "]c"), "Next git hunk")
           map("n", "[h", nav_hunk("prev", "[c"), "Previous git hunk")
           map("n", "<leader>gs", gs.stage_hunk, "Stage hunk")
@@ -129,6 +135,35 @@ require("lazy").setup({
           map("n", "<leader>gp", gs.preview_hunk, "Preview hunk")
           map("n", "<leader>gb", function() gs.blame_line({ full = true }) end, "Blame line")
           map("n", "<leader>gB", gs.toggle_current_line_blame, "Toggle inline blame")
+          map("n", "<leader>gc", function()
+            local actions = require("telescope.actions")
+            require("telescope.builtin").git_commits({
+              prompt_title = "Pick diff base",
+              attach_mappings = function(prompt_bufnr)
+                actions.select_default:replace(function()
+                  local entry = require("telescope.actions.state").get_selected_entry()
+                  actions.close(prompt_bufnr)
+                  if entry then set_base(entry.value) end
+                end)
+                return true
+              end,
+            })
+          end, "Pick commit as diff base")
+          map("n", "<leader>g0", set_base, "Reset diff base")
+          map("n", "<leader>gf", function()
+            local base = require("gitsigns.config").config.base or "HEAD"
+            local root = vim.b[bufnr].gitsigns_status_dict.root
+            require("telescope.builtin").find_files({
+              prompt_title = "Files changed since " .. base,
+              cwd = root,
+              find_command = { "git", "diff", "--name-only", "--diff-filter=d", base },
+              previewer = require("telescope.previewers").new_termopen_previewer({
+                get_command = function(entry)
+                  return { "git", "-C", root, "--no-pager", "diff", base, "--", entry.value }
+                end,
+              }),
+            })
+          end, "Files changed since diff base")
         end,
       })
     end,
