@@ -1,12 +1,12 @@
 # dotfiles
 
-macOS terminal setup: iTerm2, tmux and Neovim 0.12+, with Caps Lock as the tmux prefix.
+macOS setup: apps and Dock layout, plus iTerm2, tmux and Neovim 0.12+ with Caps Lock as the tmux prefix.
 
 Run from the repo root:
 
 ```sh
-brew install neovim tree-sitter-cli ripgrep tmux
-brew install --cask iterm2 karabiner-elements rectangle
+brew bundle
+curl -fsSL https://claude.ai/install.sh | bash
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 mkdir -p ~/.config
@@ -21,7 +21,7 @@ defaults write com.googlecode.iterm2 AllowClipboardAccess -bool true
 Then:
 
 - Log out and back in.
-- Open Karabiner-Elements and Rectangle once and allow what they ask for.
+- Open Karabiner-Elements, Rectangle and Tailscale once and allow what they ask for.
 - nvim: run `:Lazy sync`.
 - tmux: press `C-a I` to install the plugins.
 - iTerm2: set the font to Monaco 14.
